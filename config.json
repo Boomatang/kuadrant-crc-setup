@@ -1,0 +1,12 @@
+{
+  "gateway_provider": "istio",
+  "kuadrant_namespace": "kuadrant-system",
+  "toystore_namespace": "toystore",
+  "container_engine": "podman",
+  "crc_registry": "default-route-openshift-image-registry.apps-crc.testing",
+  "crc_cpus": 8,
+  "crc_memory": 20480,
+  "crc_disk": 100,
+  "crc_pull_secret": "~/.crc/pull-secret",
+  "console_plugin_image": ""
+}
