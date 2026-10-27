@@ -5,8 +5,8 @@
   "container_engine": "podman",
   "crc_registry": "default-route-openshift-image-registry.apps-crc.testing",
   "crc_cpus": 8,
-  "crc_memory": 20480,
-  "crc_disk": 100,
+  "crc_memory": 32480,
+  "crc_disk": 150,
   "crc_pull_secret": "~/.crc/pull-secret",
-  "console_plugin_image": ""
+  "console_plugin_image": "quay.io/kuadrant/console-plugin:v0.3.8"
 }

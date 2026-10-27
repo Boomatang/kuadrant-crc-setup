@@ -95,9 +95,10 @@ function env_setup
     make -C $REPO_PATH install-cert-manager
     or abort "Failed to install cert-manager"
 
-    info "Generating and applying dependency manifests..."
-    make -C $REPO_PATH dependencies-manifests
-    or abort "Failed to generate dependency manifests"
+    info "Configuring development dependencies..."
+    kubectl -n $KUADRANT_NS apply --server-side --field-manager=dev-setup \
+        -f $REPO_PATH/config/dev/dns-operator-configmap.yaml
+    or abort "Failed to configure development dependencies"
     if not $REPO_PATH/bin/kustomize build $REPO_PATH/config/dependencies | kubectl apply --server-side --force-conflicts -f -
         warn "Dependency apply had issues"
     end
@@ -133,9 +134,19 @@ function istio_env_setup
         or abort "Failed to install Istio"
     end
 
-    info "Waiting for Istio CRD to be established..."
+    info "Waiting for Istio CRDs to be established..."
     kubectl wait --for=condition=Established crd/istios.sailoperator.io --timeout=300s
     or abort "Timed out waiting for Istio CRD"
+    kubectl wait --for=condition=Established crd/istiocnis.sailoperator.io --timeout=300s
+    or abort "Timed out waiting for IstioCNI CRD"
+
+    info "Deploying IstioCNI..."
+    kubectl apply -f $SCRIPT_DIR/config/istio-cni.yaml
+    or abort "Failed to deploy IstioCNI"
+
+    info "Waiting for IstioCNI DaemonSet to be ready..."
+    kubectl -n istio-system wait --timeout=300s --for=condition=Ready istiocni/default
+    or abort "Timed out waiting for IstioCNI to be ready"
 
     info "Deploying Istio gateway..."
     make -C $REPO_PATH deploy-istio-gateway
@@ -398,7 +409,20 @@ function do_redeploy
     make -C $REPO_PATH deploy IMG=$CRC_IMG
     or abort "Failed to deploy operator"
 
-    info "Waiting for operator deployments..."
+    info "Forcing image pull on next restart..."
+    kubectl patch deployment kuadrant-operator-controller-manager -n $KUADRANT_NS \
+        -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"Always"}]}}}}'
+    or abort "Failed to patch imagePullPolicy"
+
+    info "Restarting operator to pick up new image..."
+    kubectl rollout restart deployment/kuadrant-operator-controller-manager -n $KUADRANT_NS
+    or abort "Failed to restart operator deployment"
+
+    info "Waiting for operator rollout..."
+    kubectl -n $KUADRANT_NS rollout status deployment/kuadrant-operator-controller-manager --timeout=300s
+    or abort "Timed out waiting for operator rollout"
+
+    info "Waiting for all deployments..."
     kubectl -n $KUADRANT_NS wait --timeout=300s --for=condition=Available deployments --all
     or abort "Timed out waiting for operator deployments"
 
