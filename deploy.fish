@@ -156,6 +156,11 @@ function istio_env_setup
     kubectl annotate gateway kuadrant-ingressgateway -n gateway-system \
         networking.istio.io/service-type=ClusterIP --overwrite
     or abort "Failed to annotate gateway"
+
+    info "Setting gateway listener hostname..."
+    kubectl patch gateway kuadrant-ingressgateway -n gateway-system --type merge \
+        -p '{"spec":{"listeners":[{"name":"http","hostname":"*.apps-crc.testing","port":80,"protocol":"HTTP","allowedRoutes":{"namespaces":{"from":"All"}}}]}}'
+    or abort "Failed to patch gateway listener hostname"
 end
 
 function envoygateway_env_setup
@@ -191,7 +196,11 @@ function deploy_operator
 
     info "Deploying operator..."
     make -C $REPO_PATH deploy IMG=$CRC_IMG
-    or abort "Failed to deploy operator"
+    or begin
+        info "Deploy conflict detected, forcing field ownership..."
+        $REPO_PATH/bin/kustomize build $REPO_PATH/config/deploy | kubectl apply --server-side --force-conflicts -f -
+        or abort "Failed to deploy operator"
+    end
 
     info "Waiting for operator deployments..."
     kubectl -n $KUADRANT_NS wait --timeout=300s --for=condition=Available deployments --all
@@ -345,6 +354,14 @@ function deploy_sample
     kubectl apply -n $TOYSTORE_NS -f $REPO_PATH/examples/toystore/ratelimitpolicy_httproute.yaml
     or abort "Failed to apply RateLimitPolicy"
 
+    info "Deploying DNS provider secret..."
+    kubectl apply -n gateway-system -f $SCRIPT_DIR/config/toystore/dns-provider-secret.yaml
+    or abort "Failed to apply DNS provider secret"
+
+    info "Deploying DNSPolicy..."
+    kubectl apply -n gateway-system -f $SCRIPT_DIR/config/toystore/dnspolicy.yaml
+    or abort "Failed to apply DNSPolicy"
+
     info "Creating OpenShift Route for toystore..."
     kubectl apply -n gateway-system -f $SCRIPT_DIR/config/toystore/route.yaml 2>/dev/null
     or warn "Could not create toystore route (OpenShift Route API not available)"
@@ -407,7 +424,11 @@ function do_redeploy
 
     info "Deploying operator..."
     make -C $REPO_PATH deploy IMG=$CRC_IMG
-    or abort "Failed to deploy operator"
+    or begin
+        info "Deploy conflict detected, forcing field ownership..."
+        $REPO_PATH/bin/kustomize build $REPO_PATH/config/deploy | kubectl apply --server-side --force-conflicts -f -
+        or abort "Failed to deploy operator"
+    end
 
     info "Forcing image pull on next restart..."
     kubectl patch deployment kuadrant-operator-controller-manager -n $KUADRANT_NS \

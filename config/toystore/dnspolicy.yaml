@@ -1,0 +1,9 @@
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: toystore-dns
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
